@@ -1,0 +1,674 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Heat-Marked House</title>
+<style>
+/* Layout: header; toolbar; main grid = annotated 3D scene (left) + core sample (right); record vs inside band; readout. Forensic style: dark model space, thin lines, measured annotations, one red. */
+:root{
+  --bg:#ffffff; --panel:#ffffff; --fg:#000000; --muted:#4d4d4d; --faint:#8c8c8c; --rule:#d6d6d6;
+  --accent:#d10a0a; --f:Arial,"Helvetica Neue",Helvetica,sans-serif; --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --scene:#0e0e0e; --sceneInk:#e9e9e6; --sceneMuted:#8e8e8a;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#000000; --panel:#0d0d0d; --fg:#ffffff; --muted:#bdbdbd; --faint:#8a8a8a; --rule:#2e2e2e; --accent:#ff3b30; color-scheme:dark}}
+:root[data-theme="dark"]{ --bg:#000000; --panel:#0d0d0d; --fg:#ffffff; --muted:#bdbdbd; --faint:#8a8a8a; --rule:#2e2e2e; --accent:#ff3b30; color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--fg);font-family:var(--f);font-size:15px;line-height:1.5;margin:0;
+  padding:28px max(clamp(16px,2.5vw,40px),env(safe-area-inset-right,0px)) 56px max(clamp(16px,2.5vw,40px),env(safe-area-inset-left,0px))}
+.wrap{max-width:1880px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+header{border-top:6px solid var(--accent);padding-top:16px;display:flex;flex-direction:column;gap:10px}
+h1,h3{margin:0;font-weight:700;text-wrap:balance}
+h1{font-size:clamp(28px,4.2vw,40px);line-height:1.1}
+h3{font-size:13px}
+p{margin:0;max-width:80ch}
+.eyebrow{font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+.lede{color:var(--muted);font-size:16px}
+.toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px 22px;padding:12px 14px;border:1px solid var(--rule);border-radius:8px}
+.grp{display:flex;align-items:center;gap:8px}
+.tlabel{font-size:13px;font-weight:700}
+.seg{display:inline-flex;border:1px solid var(--rule);border-radius:7px;overflow:hidden}
+.seg button{font:500 13px var(--f);background:transparent;color:var(--muted);border:0;padding:6px 11px;cursor:pointer}
+.seg button + button{border-left:1px solid var(--rule)}
+.seg button[aria-pressed="true"]{background:var(--fg);color:var(--panel)}
+input[type=range]{accent-color:var(--accent)}
+.grp output{font:12.5px var(--mono);color:var(--muted);min-width:64px}
+.time{flex:1;min-width:240px}
+.time input{flex:1;min-width:100px}
+button.btn{font:700 13px var(--f);background:var(--fg);color:var(--panel);border:0;border-radius:7px;padding:7px 14px;cursor:pointer;white-space:nowrap;min-width:100px}
+button.btn.ghost{background:transparent;color:var(--fg);border:1px solid var(--rule);min-width:0}
+button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.main{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:20px;align-items:stretch}
+@media (max-width:900px){.main{grid-template-columns:1fr}}
+.scene{position:relative;border-radius:10px;overflow:hidden;height:auto;min-height:min(58vh,560px);background:var(--scene)}
+@media (max-width:900px){.scene{height:min(70vh,680px);min-height:440px}}
+.scene canvas{display:block;width:100%;height:100%;touch-action:none}
+#ann{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
+#ann text{font:11px var(--mono);fill:var(--sceneInk);paint-order:stroke;stroke:#0e0e0e;stroke-width:3px;stroke-linejoin:round}
+#ann .m{fill:var(--sceneMuted)}
+#ann .r{fill:#ff4a3d}
+.chips{position:absolute;left:14px;top:14px;display:flex;flex-wrap:wrap;gap:6px;pointer-events:none}
+.chips span{font:700 11.5px var(--f);color:var(--scene);background:var(--sceneInk);padding:3px 10px;border-radius:999px}
+.chips span.r{background:#ff4a3d;color:#fff}
+.layers{position:absolute;left:14px;top:52px;bottom:14px;width:min(330px,42%);overflow:auto;display:flex;flex-direction:column;gap:6px;padding-right:4px}
+.layers .card .p,.layers .card .d{display:none}
+.layers .card.on .p,.layers .card.on .d,.layers .card.pin .p,.layers .card.pin .d{display:block}
+.layers .card{cursor:pointer}
+.layers .hd{position:sticky;top:0;z-index:2;background:rgba(14,14,14,.92);padding:4px 0 6px;display:flex;justify-content:space-between;align-items:center;font:700 11.5px var(--mono);color:var(--sceneInk);letter-spacing:.04em}
+.layers .hd button{font:700 11px var(--f);background:var(--sceneInk);color:var(--scene);border:0;border-radius:999px;padding:3px 10px;cursor:pointer}
+.layers .card{background:rgba(14,14,14,.86);border:1px solid #3a3a38;border-radius:6px;padding:8px 10px;color:var(--sceneInk);font:11.5px var(--f);line-height:1.45;cursor:default;opacity:0;transform:translateX(-8px);transition:opacity .35s,transform .35s,border-color .2s}
+.layers.open .card{opacity:1;transform:none}
+.layers .card.hot{border-color:#ff4a3d}
+.layers .card:hover,.layers .card.on{border-color:var(--sceneInk)}
+.layers .t{display:flex;justify-content:space-between;gap:8px;font-weight:700}
+.layers .t span:last-child{font:700 11px var(--mono)}
+.layers .p{font:10.5px var(--mono);color:var(--sceneMuted)}
+.layers .d{color:#c9c9c4}
+.layers .s{font:11px var(--mono);color:var(--sceneMuted)}
+.layers .card.hot .s{color:#ff4a3d}
+.key{position:absolute;right:14px;bottom:14px;font:11px var(--mono);color:var(--sceneMuted);display:flex;flex-direction:column;gap:5px;align-items:flex-end}
+.key .bar{height:7px;width:190px}
+.key .lab{display:flex;justify-content:space-between;width:190px}
+aside{border:1px solid var(--rule);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:8px;min-width:0}
+aside .sub{font:12px var(--mono);color:var(--muted)}
+#core{width:100%;height:422px;display:block}
+aside{gap:6px!important;padding:12px 14px!important}
+.band{border:1px solid var(--rule);border-radius:10px;padding:12px 16px 10px;display:flex;flex-direction:column;gap:6px}
+.policy{font-size:13px;color:var(--muted);border-top:1px solid var(--rule);padding-top:10px;max-width:110ch}
+.policy b{color:var(--fg)}
+.policy a{color:var(--accent)}
+#rec,#after{width:100%;height:150px;display:block}
+.bandHd{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.bandHd .seg button{padding:4px 10px;font-size:12px}
+.read{border-left:2px solid var(--accent);padding-left:12px;font-size:14px;max-width:100ch;display:flex;flex-direction:column;gap:4px}
+.read .warn{color:var(--accent);font-weight:700}
+.read .num{font-family:var(--mono)}
+.err{padding:20px;color:#ff4a3d}
+
+/* everything needed to read one run (controls, model, wall section, record vs inside) fits one screen */
+body{padding-top:14px}
+.fit{height:calc(100dvh - 28px);min-height:600px;display:flex;flex-direction:column;gap:10px}
+.fit header{flex-direction:row;align-items:baseline;gap:16px;padding-top:10px;border-top-width:5px}
+.fit h1{font-size:22px}
+.fit .toolbar{padding:8px 12px}
+.fit .main{flex:1 1 0;min-height:0}
+.fit .scene{height:100%;min-height:0}
+.fit aside{min-height:0;overflow:hidden;gap:6px;padding:12px 14px}
+.coreWrap{flex:1 1 0;min-height:0;position:relative}
+.coreWrap #core{position:absolute;inset:0;width:100%;height:100%}
+.fit .band{padding:10px 16px 8px;gap:4px;flex:none}
+.notes{display:flex;flex-direction:column;gap:10px}
+.notes .policy{border-top:1px solid var(--rule);padding-top:10px}
+@media (max-width:900px){ .fit{height:auto;min-height:0} .fit .scene{height:min(70vh,680px);min-height:440px} .coreWrap{flex:none;height:440px} }
+.after{display:flex;flex-direction:column;gap:18px;margin-top:14px}
+.afterHd{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
+.after h2{font-size:20px;margin:0}
+.cats{display:flex;flex-wrap:wrap;gap:6px}
+.cats button{font:12px var(--f);color:var(--fg);background:transparent;border:1px solid var(--rule);border-radius:999px;padding:4px 10px;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.cats button[aria-pressed="false"]{opacity:.4}
+.dot{width:9px;height:9px;border-radius:50%;display:inline-block;flex:none;box-sizing:border-box}
+.dot.em{background:var(--accent)} .dot.cln{background:var(--faint)} .dot.ins{background:var(--fg)}
+.dot.res{border:2px solid var(--accent);background:var(--bg)} .dot.hp{border:2px solid var(--fg);background:var(--bg)}
+/* time axis: one horizontal line through the four periods; each period drops a vertical line with its events */
+.tl{display:grid;grid-template-columns:repeat(4,minmax(0,1fr))}
+@media (max-width:900px){.tl{grid-template-columns:1fr 1fr}}
+@media (max-width:560px){.tl{grid-template-columns:1fr}}
+.ph{display:flex;flex-direction:column}
+.phh{position:relative;border-top:2px solid var(--faint);padding:14px 18px 10px 0;display:flex;flex-direction:column}
+.phh::before{content:"";position:absolute;left:0;top:-7px;width:12px;height:12px;border-radius:50%;background:var(--fg)}
+.ph:last-child .phh::after{content:"";position:absolute;right:-2px;top:-7px;border-left:10px solid var(--faint);border-top:6px solid transparent;border-bottom:6px solid transparent}
+.phh b{font-size:15px} .phh span{font:12px var(--mono);color:var(--muted)}
+.ev{position:relative;margin:0 18px 0 5px;border-left:1px solid var(--rule);padding:0 0 14px 16px;display:flex;flex-direction:column;gap:2px;font-size:13px}
+.ev[hidden]{display:none}
+.evh{display:flex;align-items:center}
+.evh .dot{position:absolute;left:-5px;top:4px}
+.ev .dt{font:11.5px var(--mono);color:var(--muted)}
+.ev b{font-size:13.5px}
+.ev p{margin:0;color:var(--muted);line-height:1.45}
+</style>
+</head><body>
+<div class="wrap">
+<div class="fit">
+<header>
+  <div class="eyebrow">Caltech D2D · FIRES · design concept</div>
+  <h1>Heat-Marked House</h1>
+</header>
+
+<div class="toolbar">
+  <div class="grp"><span class="tlabel">Burning</span>
+    <div class="seg" id="src" role="group" aria-label="What is burning"><button data-k="0" aria-pressed="false">Hedge</button><button data-k="1" aria-pressed="false">Shed</button><button data-k="2" aria-pressed="true">Neighbor house</button></div></div>
+  <div class="grp"><span class="tlabel">View</span>
+    <div class="seg" id="mode" role="group" aria-label="View"><button data-m="see" aria-pressed="true">What you see</button><button data-m="xray" aria-pressed="false">X-ray: wood behind</button><button data-m="flux" aria-pressed="false">Heat flux</button></div></div>
+  <div class="grp time"><span class="tlabel">Time</span><input type="range" id="time" min="0" max="60" step="0.5" value="0" aria-label="Minutes since the fire started"><output id="timeOut"></output></div>
+  <div class="grp"><button class="btn" id="play">▶ Play</button><button class="btn ghost" id="reset" aria-label="Back to start">↺</button></div>
+</div>
+
+<div class="main">
+  <div class="scene" id="scene">
+    <svg id="ann" aria-hidden="true"></svg>
+    <div class="chips" id="hints"><span class="r">Drag the fire</span><span>Click a wall</span><span>Hover the north wall for layer names</span></div>
+    <div class="layers" id="layers" hidden></div>
+    <div class="key" id="key"></div>
+  </div>
+  <aside>
+    <h3>Inside the wall at the marked point</h3>
+    <div class="sub" id="coreSub"></div>
+    <button class="btn ghost" id="focus" style="align-self:flex-start">⌖ Face the section wall</button>
+    <div class="seg" id="path" role="group" aria-label="Where the section runs"><button data-p="ins" aria-pressed="true">Through insulation</button><button data-p="stud" aria-pressed="false">Through a stud</button></div>
+    <div class="coreWrap"><canvas id="core" aria-label="Temperature through the wall at the marked point, layer by layer"></canvas></div>
+  </aside>
+</div>
+
+<div class="band">
+  <div class="bandHd"><h3 id="bandTitle">What the record would say vs what is inside this wall</h3>
+    <div class="seg" id="bandTab" role="group" aria-label="Bottom panel"><button data-b="rec" aria-pressed="true">Record vs inside</button><button data-b="after" aria-pressed="false">Claim &amp; time out of home</button></div></div>
+  <canvas id="rec" aria-label="Likely inspection class compared with hidden damage behind the wall"></canvas>
+  <canvas id="after" hidden aria-label="How long contaminants stay, and what insurance pays, for this wall"></canvas>
+</div>
+
+</div>
+<div class="read" id="read" aria-live="polite" hidden></div>
+<section class="after">
+  <div class="afterHd"><h2>After the Eaton Fire: who acts, and when</h2>
+    <div class="cats" id="cats" role="group" aria-label="Show categories"><button data-c="em" aria-pressed="true"><span class="dot em"></span>Emergency & residents</button><button data-c="cln" aria-pressed="true"><span class="dot cln"></span>Inspection & cleanup</button><button data-c="ins" aria-pressed="true"><span class="dot ins"></span>Insurance</button><button data-c="res" aria-pressed="true"><span class="dot res"></span>Research & testing</button><button data-c="hp" aria-pressed="true"><span class="dot hp"></span>Public health & law</button></div></div>
+  <div class="tl"><div class="ph"><div class="phh"><b>During the fire</b><span>Jan 7–31, 2025</span></div><div class="ev" data-c="em"><div class="evh"><span class="dot em"></span><span class="dt">Jan 7, 6:18 pm</span></div><b>Fire starts</b><p>Wind-driven fire spreads into Altadena overnight; evacuation orders across the area.</p></div><div class="ev" data-c="ins"><div class="evh"><span class="dot ins"></span><span class="dt">Jan 2025</span></div><b>Claims open</b><p>The living-expense (ALE) clock starts on the date of loss. The state asks insurers for advance payments.</p></div><div class="ev" data-c="res"><div class="evh"><span class="dot res"></span><span class="dt">Jan 2025</span></div><b>Lead in the air</b><p>At one Los Angeles monitor, lead in fine particles rose about 110 times for several days (Baliaka et al., MMWR 2025).</p></div><div class="ev" data-c="cln"><div class="evh"><span class="dot cln"></span><span class="dt">Jan 2025</span></div><b>Damage inspection (DINS)</b><p>Teams walk every structure and grade it from Affected to Destroyed. Final count: 9,414 destroyed, 1,074 damaged.</p></div><div class="ev" data-c="em"><div class="evh"><span class="dot em"></span><span class="dt">Jan 31</span></div><b>Fire contained</b><p>14,021 acres burned; 19 people died.</p></div></div><div class="ph"><div class="phh"><b>First months</b><span>Feb–May 2025</span></div><div class="ev" data-c="cln"><div class="evh"><span class="dot cln"></span><span class="dt">Feb 26</span></div><b>Hazardous waste removed (Phase 1)</b><p>EPA finishes removing batteries, chemicals and other hazards from burned lots within 30 days, then hands over to Phase 2.</p></div><div class="ev" data-c="res"><div class="evh"><span class="dot res"></span><span class="dt">Feb 2025</span></div><b>Caltech surface sampling</b><p>Cleaned surfaces inside and miles from the burn area: about 10% still at or above the federal lead limit.</p></div><div class="ev" data-c="ins"><div class="evh"><span class="dot ins"></span><span class="dt">May 2025</span></div><b>Smoke claims task force</b><p>The insurance commissioner forms a task force on smoke claims and cleanup.</p></div><div class="ev" data-c="hp"><div class="evh"><span class="dot hp"></span><span class="dt">May 22</span></div><b>Free soil lead testing</b><p>LA County Public Health tests yard soil downwind of the fire; about 26,000 homes invited.</p></div></div><div class="ph"><div class="phh"><b>First year</b><span>Jun 2025–Jan 2026</span></div><div class="ev" data-c="cln"><div class="evh"><span class="dot cln"></span><span class="dt">Aug 29</span></div><b>Debris removal done (Phase 2)</b><p>The Army Corps of Engineers finishes clearing burned lots in Altadena, Pasadena and Sierra Madre.</p></div><div class="ev" data-c="res"><div class="evh"><span class="dot res"></span><span class="dt">Late 2025</span></div><b>Homes tested after cleanup</b><p>Residents’ group data: 63% of 50 professionally cleaned homes still had floor lead far above EPA screening levels; 36% of those tested had asbestos.</p></div><div class="ev" data-c="res"><div class="evh"><span class="dot res"></span><span class="dt">2025–</span></div><b>Long-term health study</b><p>LA Fire HEALTH Study follows 50 homes and their residents: air, dust, blood, hair and urine.</p></div><div class="ev" data-c="em"><div class="evh"><span class="dot em"></span><span class="dt">Jan 2026</span></div><b>One year on</b><p>Some standing homes are still sealed off; a windowsill can fail a lead test after four professional cleanings.</p></div></div><div class="ph"><div class="phh"><b>Year two</b><span>2026–2027</span></div><div class="ev" data-c="ins"><div class="evh"><span class="dot ins"></span><span class="dt">Mar 13, 2026</span></div><b>Task force report</b><p>Finds survivors “falling through the gaps” in smoke testing and cleanup rules; calls for statewide standards.</p></div><div class="ev" data-c="ins"><div class="evh"><span class="dot ins"></span><span class="dt">Sep 15, 2026</span></div><b>AB 1795 signed</b><p>Smoke damage in the fire zone is presumed to come from the fire; insurers pay for testing and cannot end living expenses until the home is cleared.</p></div><div class="ev" data-c="hp"><div class="evh"><span class="dot hp"></span><span class="dt">Sep 15, 2026</span></div><b>AB 1642 signed</b><p>State cleanup standards: lead and asbestos by end of 2028, other contaminants by 2029. Heat damage inside walls is not covered.</p></div><div class="ev" data-c="ins"><div class="evh"><span class="dot ins"></span><span class="dt">Jan 7, 2027</span></div><b>24 months of living expenses</b><p>Minimum ALE period ends; up to 12 more months if rebuilding is delayed by things outside the owner’s control.</p></div></div></div>
+  <div class="notes">
+  <p class="policy"><b>Sources.</b> <a href="https://file.lacounty.gov/SDSInter/lac/1199046_Eaton_Palisades_Fires_Anniversary_Fact_Sheet.pdf">LA County fire anniversary fact sheet</a> · <a href="https://spectrumlocalnews.com/ca/california/wildfires/2025/02/26/epa-announces-completion-of-phase-1-fire-zone-hazardous-materials-removal">EPA Phase 1</a> · <a href="https://kathrynbarger.lacounty.gov/barger-commends-completion-of-u-s-army-corps-of-engineers-debris-work-in-altadena/">Army Corps completion</a> · <a href="https://lacounty.gov/2025/05/22/public-health-launches-eaton-fire-soil-testing-program">Soil testing program</a> · <a href="https://www.insurancejournal.com/news/west/2025/09/11/838843.htm">Caltech sampling, LA Fire HEALTH Study</a> · <a href="https://laist.com/news/housing-homelessness/altadena-eaton-fire-homes-post-remediation-testing-lead-asbestos">Post-cleanup testing (EFRU)</a> · <a href="https://abc7.com/post/altadena-homeowners-struggle-remove-lead-homes-yards-1-year-eaton-fire/18369480/">One year on</a> · <a href="https://www.randrmagonline.com/articles/92057-after-the-eaton-fire-evidence-based-priorities-for-post-wildfire-assessment-and-restoration">Restoration review (air lead, PAHs)</a> · <a href="https://sciencedaily.com/releases/2024/12/241223134312.htm">Indoor smoke gases, Marshall Fire</a> · <a href="https://archive.cdc.gov/www_atsdr_cdc_gov/csem/leadtoxicity/biologic_fate.html">Lead in blood (ATSDR)</a> · <a href="https://www.aiha.org/news/241024-epa-finalizes-stronger-requirements-for-dust-lead-hazards">EPA dust-lead levels</a> · <a href="https://www.insurance.ca.gov/0400-news/0100-press-releases/2026/release014-2026.cfm">Task force report</a> · <a href="https://www.insurance.ca.gov/0400-news/0100-press-releases/2026/release031-2026.cfm">AB 1795</a> · <a href="https://www.propertyinsurancecoveragelaw.com/blog/california-wildfire-ale-extensions/">ALE rules (Ins. Code §2060)</a> · <a href="https://www.hbblaw.com/repair-cost-exceeding-actual-cash-value-does-not-establish-total-loss-under-fire-insurance-policy-05-31-2017/">Total loss (Garnes, 2017)</a>. In California a total loss means the home is physically destroyed, not that repairs cost more than it is worth; a partial loss is paid as repair cost less depreciation, up to the policy limit. Not legal advice.</p>
+
+  </div>
+</section>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(function(){
+if(!window.THREE){ document.getElementById('scene').innerHTML='<div class="err">The 3D library could not load. Check the connection and reload.</div>'; return; }
+const $=s=>document.querySelector(s);
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+const fmt=m=>m%1?m.toFixed(1):String(m);
+
+/* ================= physics =================
+   1. Flames = a vertical radiating panel. Emitted heat E = σ·T⁴ (Stefan–Boltzmann, flame treated as a black body).
+   2. Heat reaching a wall point q = E × view factor (how much of the point's view the flames fill), summed over small patches of the panel.
+   3. The wall surface balances absorbed heat against re-radiation, convection to air and conduction into the wall.
+   4. Heat moves through each layer with its own conductivity, density and specific heat (1D, slice by slice).            */
+const SIG=5.67e-8, ABS=0.9, EMI=0.9, HC=15, TINF=293.15;
+const SOURCES=[ {name:'Burning hedge',  w:3,  h:2.2, T:900},
+                {name:'Burning shed',   w:4,  h:3.0, T:900},
+                {name:'Burning neighbor house', w:10, h:6.0, T:1000} ];
+let srcK=2;
+const E0=()=>SIG*Math.pow(SOURCES[srcK].T+273.15,4)/1000; // kW/m²
+const TMAX=60, DT=0.5, NT=Math.round(TMAX/DT)+1;
+const shape=m=>m<=0?0:m<8?(u=>u*u*(3-2*u))(m/8):m<14?1:Math.exp(-(m-14)/8); // fire grows, peaks, burns down (assumed)
+
+// Wall build-up, outside to inside. Three-coat stucco (scratch, brown, finish) over metal lath and two plies of building paper.
+// Thermal values: typical handbook values (IES VE material table). The section can run through an insulation bay or through a stud.
+let path='ins';
+const STUCCO={kc:0.721,rho:1858,c:837};
+function makeLayers(){ return [
+  {k:'paint',  name:'Exterior paint', th:0},
+  {k:'finish', name:'Finish coat (stucco)', mat:'stucco', th:0.003,  ...STUCCO, n:3, disp:0.13},
+  {k:'brown',  name:'Brown coat (stucco)',  mat:'stucco', th:0.0095, ...STUCCO, n:8, disp:0.17},
+  {k:'scratch',name:'Scratch coat + metal lath', mat:'stucco', th:0.0095, ...STUCCO, n:8, disp:0.17},
+  {k:'wrb',    name:'Building paper, 2 plies', mat:'paper', th:0.0015, kc:0.19, rho:960, c:837, n:2, disp:0.10},
+  {k:'sheath', name:'Plywood sheathing', mat:'wood', th:0.012, kc:0.15, rho:700, c:1420, n:6, disp:0.18},
+  path==='stud' ? {k:'cavity', name:'Wood stud, 2×4', mat:'wood', th:0.089, kc:0.115, rho:513, c:1381, n:18, disp:0.52}
+                : {k:'cavity', name:'Glass-fibre insulation', mat:'ins', th:0.089, kc:0.04, rho:12, c:840, n:18, disp:0.52},
+  {k:'gyp',    name:'Gypsum board', mat:'gyp', th:0.0127, kc:0.16, rho:950, c:840, n:6, disp:0.17},
+  {k:'ipaint', name:'Room-side paint', th:0}]; }
+let LAYERS, CELLS, FIRST, NC, G, G_ROOM, DT_S, TAB;
+const QL=[...Array(31)].map((_,i)=>i*5);
+// run the wall for a given peak incident heat flux (kW/m²); returns per-frame temperatures (°C)
+function runWall(qPeak, keepAll){
+  const T=new Float64Array(NC).fill(TINF), dq=new Float64Array(NC);
+  const surf=new Float32Array(NT).fill(20), wood=new Float32Array(NT).fill(20), all=keepAll?CELLS.map(()=>new Float32Array(NT).fill(20)):null;
+  let t=0, n=1;
+  while(n<NT){ const q=qPeak*1000*shape(t/60);
+    for(let i=0;i<NC;i++){ let f=0;
+      if(i===0){ const s=T[0]; f+=ABS*q-EMI*SIG*(s*s*s*s-TINF*TINF*TINF*TINF)-HC*(s-TINF); } else f+=G[i]*(T[i-1]-T[i]);
+      f+= i<NC-1? G[i+1]*(T[i+1]-T[i]) : G_ROOM*(TINF-T[i]); dq[i]=f; }
+    for(let i=0;i<NC;i++) T[i]+=DT_S*dq[i]/CELLS[i].C; t+=DT_S;
+    if(t>=n*DT*60){ surf[n]=T[0]-273.15; wood[n]=T[FIRST.sheath]-273.15; if(all) for(let i=0;i<NC;i++) all[i][n]=T[i]-273.15; n++; } }
+  return {surf,wood,all};
+}
+function runMax(a){ let m=-1e9; return Array.from(a,v=>(m=Math.max(m,v))); }
+function buildModel(){
+  LAYERS=makeLayers(); CELLS=[]; FIRST={};
+  LAYERS.forEach((L,li)=>{ if(!L.n) return; FIRST[L.k]=CELLS.length; const dx=L.th/L.n; for(let i=0;i<L.n;i++) CELLS.push({dx,kc:L.kc,C:L.rho*L.c*dx,li}); });
+  NC=CELLS.length;
+  G=CELLS.map((cl,i)=>i===0?0:1/(CELLS[i-1].dx/(2*CELLS[i-1].kc)+cl.dx/(2*cl.kc)));
+  G_ROOM=1/(CELLS[NC-1].dx/(2*CELLS[NC-1].kc)+1/8);
+  DT_S=Infinity; CELLS.forEach((cl,i)=>{ const g=(i?G[i]:0)+(i<NC-1?G[i+1]:G_ROOM)+60; DT_S=Math.min(DT_S,0.4*cl.C/g); });
+  // lookup table: hottest surface and hottest outer wood so far, for peak fluxes 0…150 kW/m²
+  TAB=QL.map(q=>{ const r=runWall(q,true), L={}; LAYERS.forEach(l=>{ if(l.n) L[l.k]=runMax(r.all[FIRST[l.k]]); }); return {s:runMax(r.surf),w:runMax(r.wood),L}; });
+}
+buildModel();
+function lookL(q,n,k){ const x=Math.max(0,Math.min(QL.length-1.001,q/5)); const i=Math.floor(x), u=x-i; return TAB[i].L[k][n]*(1-u)+TAB[i+1].L[k][n]*u; }
+function look(q,n,key){ const x=Math.max(0,Math.min(QL.length-1.001,q/5)); const i=Math.floor(x), u=x-i; return TAB[i][key][n]*(1-u)+TAB[i+1][key][n]*u; }
+
+/* ================= colors and thresholds ================= */
+const PINK=300, CHAR=300, IGNITE=320, GYP=125, VINYL=74, Q_IGN=12;
+const STOPS=[[20,[236,234,229]],[150,[236,234,229]],[260,[228,216,188]],[330,[222,186,168]],[430,[212,148,134]],[560,[194,110,98]],[640,[172,158,150]],[800,[188,184,176]],[930,[202,176,128]],[1100,[190,146,72]]];
+function ramp(stops,T){ if(T<=stops[0][0]) return stops[0][1]; for(let i=1;i<stops.length;i++){ if(T<=stops[i][0]){ const [t0,c0]=stops[i-1],[t1,c1]=stops[i]; const u=(T-t0)/(t1-t0); return c0.map((c,j)=>c+(c1[j]-c)*u); } } return stops[stops.length-1][1]; }
+const faceColor=T=>ramp(STOPS,T);
+const ROOF=[[20,[120,118,114]],[150,[110,106,100]],[300,[60,56,52]],[600,[34,32,30]],[1100,[70,68,64]]];
+const FLUX=[[0,[52,58,70]],[2,[64,92,140]],[6,[90,150,190]],[10,[230,210,120]],[20,[235,130,60]],[40,[210,40,30]],[80,[110,10,20]]];
+const DINS=[{name:'No Damage',lo:0,hi:0},{name:'Affected',lo:0,hi:10},{name:'Minor',lo:10,hi:25},{name:'Major',lo:25,hi:50},{name:'Destroyed',lo:50,hi:100}];
+const dinsClass=(pct,any)=>!any?0:pct<10?1:pct<25?2:pct<50?3:4;
+const STAGE=T=>T<150?'unchanged':T<300?'paint yellowing':T<600?'pink to red':T<900?'light grey, crumbly':'buff, severe';
+
+/* ================= scene ================= */
+const host=$('#scene');
+const renderer=new THREE.WebGLRenderer({antialias:true}); renderer.setPixelRatio(Math.min(2,window.devicePixelRatio||1)); host.insertBefore(renderer.domElement,host.firstChild);
+const scene=new THREE.Scene(); scene.background=new THREE.Color(0x0e0e0e);
+const camera=new THREE.PerspectiveCamera(36,1,0.1,300); camera.position.set(-13,10,-21);
+const controls=new THREE.OrbitControls(camera,renderer.domElement);
+controls.target.set(0.5,1.2,-4); controls.enableDamping=false; controls.rotateSpeed=0.55; controls.zoomSpeed=0.5; controls.panSpeed=0.5;
+controls.minDistance=3; controls.maxDistance=60; controls.maxPolarAngle=Math.PI*0.47; controls.update();
+scene.add(new THREE.HemisphereLight(0xffffff,0x444444,0.95)); const sun=new THREE.DirectionalLight(0xffffff,0.35); sun.position.set(-8,20,-10); scene.add(sun);
+// ground: dark plane, 1 m grid, 5 m grid
+const ground=new THREE.Mesh(new THREE.PlaneGeometry(80,80),new THREE.MeshBasicMaterial({color:0x121212})); ground.rotation.x=-Math.PI/2; scene.add(ground);
+const g1=new THREE.GridHelper(60,60,0x1f1f1f,0x1c1c1c); g1.position.y=0.004; scene.add(g1);
+const g5=new THREE.GridHelper(60,12,0x2c2c2c,0x2c2c2c); g5.position.y=0.006; scene.add(g5);
+const ink=new THREE.LineBasicMaterial({color:0xe9e9e6}), inkDim=new THREE.LineBasicMaterial({color:0x6a6a66});
+const V=(x,y,z)=>new THREE.Vector3(x,y,z);
+const SURFS=[];
+function patch(name,kind,p00,p10,p01,p11,nu,nv,outward){
+  const pos=[],idx=[],cols=[]; const L=(a,b,u)=>a.clone().lerp(b,u);
+  for(let j=0;j<=nv;j++) for(let i=0;i<=nu;i++){ const p=L(L(p00,p10,i/nu),L(p01,p11,i/nu),j/nv); pos.push(p.x,p.y,p.z); cols.push(1,1,1); }
+  let n=new THREE.Vector3().crossVectors(p10.clone().sub(p00),p01.clone().sub(p00)).normalize(); const flip=n.dot(outward)<0; if(flip) n.negate();
+  for(let j=0;j<nv;j++) for(let i=0;i<nu;i++){ const a=j*(nu+1)+i,b=a+1,c=a+nu+1,d=c+1; if(flip) idx.push(a,c,b,b,c,d); else idx.push(a,b,c,b,d,c); }
+  const geo=new THREE.BufferGeometry(); geo.setAttribute('position',new THREE.Float32BufferAttribute(pos,3)); geo.setAttribute('color',new THREE.Float32BufferAttribute(cols,3)); geo.setIndex(idx); geo.computeVertexNormals();
+  const mesh=new THREE.Mesh(geo,new THREE.MeshLambertMaterial({vertexColors:true})); scene.add(mesh);
+  const s={name,kind,mesh,geo,n,count:pos.length/3,pos:geo.attributes.position.array,q:new Float32Array(pos.length/3)}; mesh.userData.surf=s; SURFS.push(s); return s; }
+const WH=3, GH=2.8;
+function wall(name,ax,az,bx,bz,h,out){ const len=Math.hypot(bx-ax,bz-az); return patch(name,'wall',V(ax,0,az),V(bx,0,bz),V(ax,h,az),V(bx,h,bz),Math.max(8,Math.round(len*4)),12,out); }
+wall('North wall',-6,-4,6,-4,WH,V(0,0,-1)); wall('South wall',-6,4,6,4,WH,V(0,0,1)); wall('West wall',-6,-4,-6,4,WH,V(-1,0,0)); wall('East wall',6,-4,6,-1,WH,V(1,0,0));
+wall('Garage north wall',6,-1,12,-1,GH,V(0,0,-1)); wall('Garage east wall',12,-1,12,4,GH,V(1,0,0)); wall('Garage south wall',6,4,12,4,GH,V(0,0,1));
+function hip(name,x0,x1,z0,z1,eave,ridge,oh){ const X0=x0-oh,X1=x1+oh,Z0=z0-oh,Z1=z1+oh,cz=(z0+z1)/2,half=(Z1-Z0)/2,r0=Math.min(X0+half,(X0+X1)/2),r1=Math.max(X1-half,(X0+X1)/2);
+  const A=V(X0,eave,Z1),B=V(X1,eave,Z1),C=V(X1,eave,Z0),D=V(X0,eave,Z0),R1=V(r0,ridge,cz),R2=V(r1,ridge,cz);
+  patch(name,'roof',A,B,R1,R2,12,6,V(0,1,1)); patch(name,'roof',C,D,R2,R1,12,6,V(0,1,-1)); patch(name,'roof',D,A,R1,R1,8,6,V(-1,1,0)); patch(name,'roof',B,C,R2,R2,8,6,V(1,1,0));
+  return [A,B,C,D,R1,R2]; }
+const studPts=[];
+[[-6,4,6,4,WH,0,1],[-6,-4,-6,4,WH,-1,0],[6,-4,6,-1,WH,1,0],[6,-1,12,-1,GH,0,-1],[12,-1,12,4,GH,1,0],[6,4,12,4,GH,0,1]].forEach(([ax,az,bx,bz,h,nx,nz])=>{
+  const len=Math.hypot(bx-ax,bz-az), ux=(bx-ax)/len, uz=(bz-az)/len, o=0.012;
+  for(let d=0;d<=len+1e-6;d+=0.406){ const x=ax+ux*Math.min(d,len)+nx*o, z=az+uz*Math.min(d,len)+nz*o; studPts.push(V(x,0,z),V(x,h,z)); }
+  [0.04,h-0.04,h-0.08].forEach(y=>studPts.push(V(ax+nx*o,y,az+nz*o),V(bx+nx*o,y,bz+nz*o))); });
+const studLines=new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(studPts),new THREE.LineBasicMaterial({color:0x2a1a12,transparent:true,opacity:0.75})); studLines.visible=false;
+const rA=hip('Roof',-6,6,-4,4,WH,4.7,0.45), rB=hip('Garage roof',6,12,-1,4,GH,3.9,0.35);
+function lines(pts,mat){ const l=new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts),mat||ink); scene.add(l); return l; }
+function box(x0,x1,z0,z1,h){ const p=[],c=[[x0,z0],[x1,z0],[x1,z1],[x0,z1]]; for(let i=0;i<4;i++){ const [a,b]=c[i],[d,e]=c[(i+1)%4]; p.push(V(a,0,b),V(d,0,e),V(a,h,b),V(d,h,e),V(a,0,b),V(a,h,b)); } return p; }
+const outl=[...box(-6,6,-4,4,WH),...box(6,12,-1,4,GH)]; [rA,rB].forEach(([A,B,C,D,R1,R2])=>outl.push(A,B,B,C,C,D,D,A,R1,R2,A,R1,D,R1,B,R2,C,R2)); lines(outl); scene.add(studLines);
+// windows (vinyl frames)
+const WINDOWS=[];
+function windowAt(x,z,nx,nz,w=1.4,y0=1.0,h=1.3){ const g=new THREE.Group(), fm=new THREE.MeshBasicMaterial({color:0xe9e9e6});
+  const glass=new THREE.Mesh(new THREE.PlaneGeometry(w,h),new THREE.MeshBasicMaterial({color:0x23272b})); glass.position.z=0.01; g.add(glass);
+  const t=0.07, bars=[[w,t,0,h/2-t/2],[w,t,0,-h/2+t/2],[t,h,-w/2+t/2,0],[t,h,w/2-t/2,0],[t,h,0,0]];
+  const ms=bars.map(([bw,bh,bx,by])=>{ const m=new THREE.Mesh(new THREE.BoxGeometry(bw,bh,0.05),fm); m.position.set(bx,by,0.03); g.add(m); return m; });
+  g.position.set(x+nx*0.02,y0+h/2,z+nz*0.02); g.lookAt(x+nx*5,y0+h/2,z+nz*5); scene.add(g); WINDOWS.push({fm,ms,c:V(x,y0+h/2,z),n:V(nx,0,nz),q:0,h}); }
+windowAt(-3.5,4,0,1); windowAt(0.5,4,0,1); windowAt(-6,0,-1,0);
+lines([V(6.9,0,4.03),V(6.9,2.3,4.03),V(6.9,2.3,4.03),V(11.1,2.3,4.03),V(11.1,2.3,4.03),V(11.1,0,4.03)],inkDim);
+
+/* ================= north wall as a section =================
+   The whole north wall is peeled in steps from west to east: each band shows the outer face of one layer,
+   set back to its true depth (×4 so it can be seen). Colors use the same heat model as the other walls,
+   for that layer, at that spot on the wall. The original wall surface stays as an invisible hit target. */
+const EXS=4, NW=SURFS[0]; NW.mesh.visible=false;
+const BANDW=[3.0,1.5,1.5,1.2,1.6,2.0,1.2];
+const secG=new THREE.Group(); scene.add(secG); let SEC=[], BANDS=[];
+const dark=new THREE.LineBasicMaterial({color:0x111111,transparent:true,opacity:0.55});
+function secQuad(pts,nu,nv,L,shade,kind){ // pts: p00,p10,p01,p11 ; flux is read at the matching point on the outer wall face
+  const [p00,p10,p01,p11]=pts, pos=[],cols=[],idx=[],qp=[]; const Lr=(a,b,u)=>a.clone().lerp(b,u);
+  for(let j=0;j<=nv;j++) for(let i=0;i<=nu;i++){ const p=Lr(Lr(p00,p10,i/nu),Lr(p01,p11,i/nu),j/nv); pos.push(p.x,p.y,p.z); cols.push(1,1,1); qp.push(V(p.x,p.y,-4)); }
+  for(let j=0;j<nv;j++) for(let i=0;i<nu;i++){ const a=j*(nu+1)+i,b=a+1,c=a+nu+1,d=c+1; idx.push(a,b,c,b,d,c); }
+  const geo=new THREE.BufferGeometry(); geo.setAttribute('position',new THREE.Float32BufferAttribute(pos,3)); geo.setAttribute('color',new THREE.Float32BufferAttribute(cols,3)); geo.setIndex(idx); geo.computeVertexNormals();
+  const m=new THREE.Mesh(geo,new THREE.MeshBasicMaterial({vertexColors:true,side:THREE.DoubleSide})); secG.add(m);
+  SEC.push({geo,L,shade,qp,q:new Float32Array(qp.length),kind}); }
+function buildSection(){
+  while(secG.children.length) secG.remove(secG.children[0]); SEC=[]; BANDS=[];
+  const groups=LAYERS.filter(L=>L.n); let x=-6, d=0; const D=[]; groups.forEach(L=>{ D.push(d); d+=L.th*EXS; }); D.push(d);
+  const z=dd=>-4+dd, ln=[];
+  groups.forEach((L,i)=>{ const a=x, b=x+BANDW[i], zf=z(D[i]); x=b; BANDS.push({L,a,b,zf,i});
+    secQuad([V(a,0,zf),V(b,0,zf),V(a,WH,zf),V(b,WH,zf)],Math.max(6,Math.round((b-a)*10)),30,L,1,'face');
+    if(i<groups.length-1) secQuad([V(b,0,zf),V(b,0,z(D[i+1])),V(b,WH,zf),V(b,WH,z(D[i+1]))],1,30,L,0.72,'riser');
+    ln.push(V(b,0,zf),V(b,WH,zf),V(a,WH,zf),V(b,WH,zf));
+    const zo=zf-0.003;
+    if(L.k==='scratch'){ for(let k=-WH;k<b-a;k+=0.18){ [[1],[-1]].forEach(([sg])=>{ const x0=sg>0?a+k:b-k, y0=0, t1=Math.max(0,-k), t2=Math.min(WH,b-a-k); if(t2>t1) ln.push(V(x0+sg*t1,t1,zo),V(x0+sg*t2,t2,zo)); }); } }
+    if(L.k==='wrb'){ [0.9,1.8,2.7].forEach(y=>ln.push(V(a,y,zo),V(b,y,zo),V(a,y-0.12,zo),V(b,y-0.12,zo))); }
+    if(L.k==='sheath'||L.k==='gyp'){ for(let s=Math.ceil((a+6)/1.22)*1.22-6;s<b-0.01;s+=1.22) if(s>a+0.01) ln.push(V(s,0,zo),V(s,WH,zo)); ln.push(V(a,2.44,zo),V(b,2.44,zo)); }
+    if(L.k==='cavity'){ const th=L.th*EXS, zc=zf+th/2-0.004; const studs=[];
+      for(let s=Math.ceil((a+6)/0.406)*0.406-6;s<b-0.02;s+=0.406) if(s>a+0.02) studs.push([s,WH/2,0.045,WH]);
+      studs.push([(a+b)/2,0.019,b-a,0.038],[(a+b)/2,WH-0.038,b-a,0.076]);
+      studs.forEach(([sx,sy,w,h])=>{ const g=new THREE.BoxGeometry(w,h,th); const bx=new THREE.Mesh(g,new THREE.MeshBasicMaterial({color:0xffffff})); bx.position.set(sx,sy,zc); secG.add(bx);
+        const e=new THREE.LineSegments(new THREE.EdgesGeometry(g),dark); e.position.copy(bx.position); secG.add(e);
+        SEC.push({mesh:bx,L:{mat:'wood',k:'cavity'},shade:0.95,qp:[V(sx,Math.min(sy,1.5),-4)],q:new Float32Array(1),kind:'stud'}); }); }
+  });
+  const l=new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(ln),dark); secG.add(l);
+}
+function fluxSection(E){ SEC.forEach(o=>{ o.qp.forEach((p,i)=>o.q[i]=E*viewFactor(p,NW.n)); }); }
+function secTemp(L,q,n){ return L.k==='finish'?look(q,n,'s'):lookL(q,n,L.k); }
+function paintSection(){ SEC.forEach(o=>{ const n=tIdx;
+  if(o.kind==='stud'){ const T=lookL(o.q[0],n,'cavity'), c=mode==='flux'?ramp(FLUX,o.q[0]):cellColor(o.L,T); o.mesh.material.color.setRGB(c[0]/255*o.shade,c[1]/255*o.shade,c[2]/255*o.shade); return; }
+  const col=o.geo.attributes.color.array; for(let i=0;i<o.q.length;i++){ const q=o.q[i]; const c=mode==='flux'?ramp(FLUX,q):cellColor(o.L,secTemp(o.L,q,n)); col[i*3]=c[0]/255*o.shade; col[i*3+1]=c[1]/255*o.shade; col[i*3+2]=c[2]/255*o.shade; }
+  o.geo.attributes.color.needsUpdate=true; }); }
+const bandAt=x=>BANDS.find(b=>x>=b.a&&x<=b.b)||null;
+buildSection();
+const FOOT=[[-6,6,-4,4],[6,12,-1,4]];
+function nearestOnHouse(x,z){ let best=null,bd=1e9; FOOT.forEach(([x0,x1,z0,z1])=>{ const px=Math.max(x0,Math.min(x1,x)), pz=Math.max(z0,Math.min(z1,z)); const d=Math.hypot(px-x,pz-z); if(d<bd){ bd=d; best=V(px,0,pz); } }); return {p:best,d:bd}; }
+const insideHouse=(x,z,pad)=>FOOT.some(([x0,x1,z0,z1])=>x>x0-pad&&x<x1+pad&&z>z0-pad&&z<z1+pad);
+
+// the flames: a vertical radiating panel, facing the house
+const fire={x:0.5,z:-10}; const flameG=new THREE.Group(); scene.add(flameG);
+const panelMat=new THREE.MeshBasicMaterial({color:0xff4a3d,transparent:true,opacity:0.35,side:THREE.DoubleSide,depthWrite:false});
+let panel=null, panelEdge=null, hatch=null; const hitBox=new THREE.Mesh(new THREE.BoxGeometry(1,1,1),new THREE.MeshBasicMaterial({visible:false})); flameG.add(hitBox);
+const ring=new THREE.Mesh(new THREE.RingGeometry(0.55,0.62,48),new THREE.MeshBasicMaterial({color:0xff4a3d,transparent:true,opacity:0.8,side:THREE.DoubleSide,depthWrite:false})); ring.rotation.x=-Math.PI/2; ring.position.y=0.02; flameG.add(ring);
+let emN=V(0,0,1), emT=V(1,0,0);
+function buildPanel(){ const S=SOURCES[srcK];
+  [panel,panelEdge,hatch].forEach(o=>o&&flameG.remove(o));
+  panel=new THREE.Mesh(new THREE.PlaneGeometry(S.w,S.h),panelMat); panel.position.y=S.h/2; flameG.add(panel);
+  const w=S.w/2,h=S.h; panelEdge=new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints([V(-w,0,0),V(w,0,0),V(w,0,0),V(w,h,0),V(w,h,0),V(-w,h,0),V(-w,h,0),V(-w,0,0)]),new THREE.LineBasicMaterial({color:0xff4a3d})); flameG.add(panelEdge);
+  const hp=[]; for(let k=-h;k<S.w;k+=0.5){ const a=Math.max(0,-k), x1=-w+k+a, y1=a, b=Math.min(h,S.w-k), x2=-w+k+b, y2=b; if(b>a) hp.push(V(x1,y1,0),V(x2,y2,0)); }
+  hatch=new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(hp),new THREE.LineBasicMaterial({color:0xff4a3d,transparent:true,opacity:0.45})); flameG.add(hatch);
+  hitBox.scale.set(S.w,S.h,1.2); hitBox.position.y=S.h/2; }
+function placeFire(){ const np=nearestOnHouse(fire.x,fire.z); emN=V(np.p.x-fire.x,0,np.p.z-fire.z).normalize(); emT=V(-emN.z,0,emN.x);
+  flameG.position.set(fire.x,0,fire.z); flameG.lookAt(fire.x+emN.x,0,fire.z+emN.z); }
+
+/* ================= heat on every surface point ================= */
+// view factor from the flame panel to a small surface element, summed over panel patches (cos·cos·dA / π r²)
+function viewFactor(P,n){ const S=SOURCES[srcK], nu=10, nv=6, dA=(S.w/nu)*(S.h/nv); let F=0;
+  for(let i=0;i<nu;i++) for(let j=0;j<nv;j++){ const u=-S.w/2+(i+0.5)*S.w/nu, v=(j+0.5)*S.h/nv;
+    const qx=fire.x+emT.x*u, qy=v, qz=fire.z+emT.z*u; const rx=P.x-qx, ry=P.y-qy, rz=P.z-qz; const d2=rx*rx+ry*ry+rz*rz, d=Math.sqrt(d2);
+    const c1=(emN.x*rx+emN.z*rz)/d, c2=-(n.x*rx+n.y*ry+n.z*rz)/d; if(c1>0&&c2>0) F+=c1*c2*dA/(Math.PI*d2); }
+  return F; }
+const tmp=V(0,0,0);
+function computeFlux(){ const E=E0();
+  SURFS.forEach(s=>{ const a=s.pos; for(let i=0;i<s.count;i++){ tmp.set(a[i*3],a[i*3+1],a[i*3+2]); s.q[i]=E*viewFactor(tmp,s.n); } });
+  WINDOWS.forEach(w=>w.q=E*viewFactor(w.c,w.n)); fluxSection(E);
+  probe.q=E*viewFactor(probe.p,probe.n); probe.run=runWall(probe.q,true); }
+let probe={surf:SURFS[0],p:V(0.5,1.5,-4),n:V(0,0,-1),q:0,run:null};
+let mode='see', tIdx=0;
+function paint(){
+  SURFS.forEach(s=>{ const col=s.geo.attributes.color.array;
+    for(let i=0;i<s.count;i++){ let c; const q=s.q[i];
+      if(mode==='flux'){ c=ramp(FLUX,q); if(Math.abs(q-Q_IGN)<0.45) c=[255,255,255]; }
+      else if(mode==='xray'&&s.kind==='wall'){ c=cellColor({mat:'wood'},look(q,tIdx,'w')); }
+      else { const T=look(q,tIdx,'s'); c=s.kind==='roof'?ramp(ROOF,T):faceColor(T); }
+      col[i*3]=c[0]/255; col[i*3+1]=c[1]/255; col[i*3+2]=c[2]/255; }
+    s.geo.attributes.color.needsUpdate=true; });
+  WINDOWS.forEach(w=>{ const T=look(w.q,tIdx,'s'), soft=T>VINYL; w.fm.color.set(soft?(T>250?0x5a2418:0xff4a3d):0xe9e9e6); const sag=soft?Math.min(0.12,(T-VINYL)/1500):0; w.ms[1].position.y=-w.h/2+0.035-sag; w.ms[4].rotation.z=sag*0.8; });
+  const live=shape(tIdx*DT); panelMat.opacity=0.05+0.2*live; studLines.visible=mode==='xray'; paintSection(); paintCore(); }
+
+/* ================= annotations (SVG over the 3D view) ================= */
+const svg=$('#ann'), NS='http://www.w3.org/2000/svg';
+function proj(v){ const p=v.clone().project(camera), r=host.getBoundingClientRect(); return {x:(p.x+1)/2*r.width, y:(1-p.y)/2*r.height, ok:p.z<1}; }
+function el(tag,attrs,text){ const e=document.createElementNS(NS,tag); for(const k in attrs) e.setAttribute(k,attrs[k]); if(text!=null) e.textContent=text; svg.appendChild(e); return e; }
+// label sits at a fixed spot in the margin (lx, ly); a leader runs from the label to the 3D anchor
+function callout(anchor,lx,ly,lines,cls,right){ const a=proj(anchor); if(!a.ok) return; const col=cls==='r'?'#ff4a3d':'#e9e9e6';
+  const ex=right?lx-8:lx+Math.max(...lines.map(t=>t.length))*6.6+8;
+  el('line',{x1:a.x,y1:a.y,x2:ex,y2:ly-4,stroke:col,'stroke-width':1,opacity:0.8});
+  el('circle',{cx:a.x,cy:a.y,r:3,fill:col});
+  lines.forEach((t,i)=>el('text',{x:lx,y:ly+i*15,class:i===0?(cls||''):'m'},t)); }
+let hoverBand=null;
+function annotate(){
+  while(svg.firstChild) svg.removeChild(svg.firstChild);
+  const r=host.getBoundingClientRect();
+  const S=SOURCES[srcK], m=tIdx*DT, live=shape(m);
+  // measured distance: flame base to nearest wall
+  const np=nearestOnHouse(fire.x,fire.z), a=proj(V(fire.x,0.05,fire.z)), b=proj(V(np.p.x,0.05,np.p.z));
+  if(a.ok&&b.ok){ el('line',{x1:a.x,y1:a.y,x2:b.x,y2:b.y,stroke:'#e9e9e6','stroke-width':1,'stroke-dasharray':'4 3'});
+    [a,b].forEach(p=>el('line',{x1:p.x-4,y1:p.y-4,x2:p.x+4,y2:p.y+4,stroke:'#e9e9e6','stroke-width':1}));
+    el('text',{x:(a.x+b.x)/2+8,y:(a.y+b.y)/2-6},`${np.d.toFixed(1)} m`); }
+  if(!exploded){ const f=proj(V(fire.x,S.h+0.4,fire.z)); if(f.ok) el('text',{x:f.x,y:f.y,class:'r','text-anchor':'middle'},`${S.name.replace('Burning ','').toUpperCase()} · ${Math.round(E0()*live)} kW/m²`); }
+  // marked point: two short lines
+  const T=look(probe.q,tIdx,'s'), Tw=probe.run.wood.slice(0,tIdx+1).reduce((x,y)=>Math.max(x,y),20);
+  callout(probe.p,r.width-230,40,[`MARKED · ${probe.q.toFixed(1)} kW/m²`,`stucco ${Math.round(T)} °C · wood ${Math.round(Tw)} °C`],Tw>=CHAR?'r':'',true);
+  if(exploded){ const box=$('#layers'), sr=host.getBoundingClientRect(); box.querySelectorAll('.card').forEach(c=>{ const i=+c.dataset.i, sl=slabs[i]; if(!sl) return; const cr=c.getBoundingClientRect(); if(cr.bottom<sr.top||cr.top>sr.bottom) return;
+      const a=proj(sl.m.position.clone().add(V(0,HHt*0.43,0))); if(!a.ok) return; const x=cr.right-sr.left, y=cr.top-sr.top+12, on=c.classList.contains('on')||c.classList.contains('hot');
+      el('line',{x1:x,y1:y,x2:a.x,y2:a.y,stroke:on?'#ff4a3d':'#8e8e8a','stroke-width':c.classList.contains('on')?1.4:0.8,opacity:0.85}); el('circle',{cx:a.x,cy:a.y,r:2.2,fill:on?'#ff4a3d':'#e9e9e6'}); }); return; }
+  // numbered tags under each band of the section wall (match the table on the right)
+  BANDS.forEach(bd=>{ const p=proj(V((bd.a+bd.b)/2,0.02,-4.55)); if(!p.ok) return; const on=hoverBand===bd.i;
+    el('circle',{cx:p.x,cy:p.y,r:8,fill:on?'#ff4a3d':'#e9e9e6'}); el('text',{x:p.x,y:p.y+3.5,'text-anchor':'middle',style:`stroke:none;font-weight:700;fill:${on?'#fff':'#0e0e0e'}`},String(bd.i+1));
+    if(on){ const Tm=secTemp(bd.L,probe.surf===NW&&bandAt(probe.p.x)===bd?probe.q:NWq((bd.a+bd.b)/2),tIdx);
+      el('text',{x:p.x,y:p.y+24,'text-anchor':'middle'},`${bd.L.name} · ${(bd.L.th*1000).toFixed(bd.L.th*1000%1?1:0)} mm · ${Math.round(Tm)} °C`); } });
+  // north arrow and 5 m scale bar
+  const o=proj(controls.target), nN=proj(controls.target.clone().add(V(0,0,-3)));
+  const ang=Math.atan2(nN.y-o.y,nN.x-o.x), cx=r.width-34, cy=r.height-96;
+  el('circle',{cx,cy,r:13,fill:'none',stroke:'#6a6a66'});
+  el('line',{x1:cx-Math.cos(ang)*10,y1:cy-Math.sin(ang)*10,x2:cx+Math.cos(ang)*10,y2:cy+Math.sin(ang)*10,stroke:'#e9e9e6','stroke-width':1.5});
+  el('text',{x:cx+Math.cos(ang)*22-4,y:cy+Math.sin(ang)*22+4},'N');
+  const right=new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld,0); const t0=proj(controls.target), t1=proj(controls.target.clone().addScaledVector(right,5)); const len=Math.hypot(t1.x-t0.x,t1.y-t0.y);
+  const sx=18, sy=r.height-22; el('line',{x1:sx,y1:sy,x2:sx+len,y2:sy,stroke:'#e9e9e6','stroke-width':1.5}); [sx,sx+len].forEach(x=>el('line',{x1:x,y1:sy-4,x2:x,y2:sy+4,stroke:'#e9e9e6'})); el('text',{x:sx+len+8,y:sy+4,class:'m'},'5 m');
+}
+const NWq=x=>E0()*viewFactor(V(x,1.5,-4),NW.n);
+
+/* ================= core sample & record (2D) ================= */
+function fitCanvas(cv){ const r=cv.getBoundingClientRect(), d=Math.min(2,window.devicePixelRatio||1); const w=Math.round(r.width*d), h=Math.round(r.height*d); if(cv.width!==w||cv.height!==h){ cv.width=w; cv.height=h; } const g=cv.getContext('2d'); g.setTransform(d,0,0,d,0,0); return [g,r.width,r.height]; }
+const MONO=css('--mono')||'monospace';
+function layerSeries(i){ const L=LAYERS[i], all=probe.run.all; return L.k==='paint'?probe.run.surf:L.k==='ipaint'?all[NC-1]:all[FIRST[L.k]]; }
+function cellColor(L,T){ switch(L.mat){
+  case 'stucco': return faceColor(T);
+  case 'paper': return T<CHAR?[132,132,126]:[58,48,42];
+  case 'wood':  return T<CHAR?[205,172,120]:T<IGNITE?[96,64,42]:[42,26,18];
+  case 'ins':   return T<250?[232,214,160]:[196,170,120];
+  case 'gyp':   return T<GYP?[230,228,222]:[246,238,232];
+  default: return faceColor(T); } }
+const hotOf=(L,M)=>L.mat==='stucco'?M>=PINK:L.mat==='wood'?M>=CHAR:L.mat==='gyp'?M>=GYP:L.mat==='paper'?M>=CHAR:L.k==='paint'?M>=150:false;
+function drawCore(){
+  const [g,W,H]=fitCanvas($('#core')); const fg=css('--fg'),muted=css('--muted'),rule=css('--rule'),acc=css('--accent'),panelC=css('--panel'); g.clearRect(0,0,W,H);
+  const n=tIdx, all=probe.run.all, mx=a=>{ let m=-1e9; for(let k=0;k<=n;k++) m=Math.max(m,a[k]); return m; };
+  // depth of each cell centre (mm, true scale)
+  const depth=[]; let d=0; CELLS.forEach(c=>{ depth.push((d+c.dx/2)*1000); d+=c.dx; }); const total=d*1000;
+  const now=CELLS.map((c,i)=>all[i][n]), hot=CELLS.map((c,i)=>mx(all[i])), sNow=probe.run.surf[n], sHot=mx(probe.run.surf);
+  const RH=H<330?13:H<360?14:H<440?16:18, CH=Math.max(56,H-38-52-10*RH-16), L0=36, R0=W-6, T0=38, X=v=>L0+(R0-L0)*v/total, ymax=Math.max(400,Math.ceil(Math.max(sHot,...hot)/100)*100), Y=t=>T0+CH-CH*(t-0)/ymax;
+  g.font='11px Arial'; g.fillStyle=muted; g.fillText('temperature through the wall (°C)',0,10);
+  g.font='10px '+MONO; g.textAlign='right'; g.fillStyle=acc; g.fillText('— hottest so far',W-48,25); g.fillStyle=fg; g.fillText('— now',W,25); g.textAlign='left';
+  // layer bands
+  let x0=0, idx=0; const bands=[];
+  LAYERS.forEach((L,li)=>{ if(!L.n) return; idx++; const x1=x0+L.th*1000; bands.push([L,li,x0,x1,idx]);
+    g.fillStyle=idx%2?'rgba(128,128,128,0.07)':'rgba(128,128,128,0.15)'; g.fillRect(X(x0),T0,X(x1)-X(x0),CH);
+    g.fillStyle=muted; g.font='9.5px '+MONO; g.textAlign='center'; if(X(x1)-X(x0)>9) g.fillText(String(idx),(X(x0)+X(x1))/2,T0+CH+12); g.textAlign='left'; x0=x1; });
+  // axes and thresholds
+  g.strokeStyle=rule; g.beginPath(); g.moveTo(L0,T0); g.lineTo(L0,T0+CH); g.lineTo(R0,T0+CH); g.stroke();
+  g.font='10px '+MONO; g.fillStyle=muted; g.textAlign='right'; for(let t=0;t<=ymax;t+=ymax>800?200:100){ g.fillText(String(t),L0-4,Y(t)+3); } g.textAlign='left';
+  [[600,'600 stucco crumbles'],[300,'300 wood chars'],[125,'125 gypsum dehydrates']].forEach(([t,lab])=>{ if(t>ymax) return; g.save(); g.setLineDash([3,3]); g.strokeStyle=muted; g.beginPath(); g.moveTo(L0,Y(t)); g.lineTo(R0,Y(t)); g.stroke(); g.restore(); g.fillStyle=muted; g.font='9.5px '+MONO; g.textAlign='right'; g.fillText(lab,R0-2,Y(t)-3); g.textAlign='left'; });
+  // profiles: hottest so far (red) and now
+  const line=(arr,s0,col,w)=>{ g.strokeStyle=col; g.lineWidth=w; g.beginPath(); g.moveTo(X(0),Y(s0)); arr.forEach((t,i)=>g.lineTo(X(depth[i]),Y(t))); g.stroke(); g.lineWidth=1; };
+  line(hot,sHot,acc,2); line(now,sNow,fg,1);
+  g.fillStyle=muted; g.font='10px '+MONO; g.textAlign='center'; g.fillText(`depth, 0–${total.toFixed(0)} mm (true scale)`,(L0+R0)/2,T0+CH+26); g.textAlign='left';
+  // layer table
+  let ly=T0+CH+52; g.fillStyle=muted; g.font='10.5px Arial'; g.fillText('layer',0,ly-14); g.textAlign='right'; g.fillText('mm',W-92,ly-14); g.fillText('now · hottest',W,ly-14); g.textAlign='left';
+  const rows=[[ {k:'paint',name:'Exterior paint',mat:'paint'},0,sNow,sHot,'·' ]];
+  bands.forEach(([L,li,a,b,i])=>{ const c0=FIRST[L.k]; rows.push([L,(L.th*1000),all[c0][n],mx(all[c0]),String(i)]); });
+  rows.push([{k:'ipaint',name:'Room-side paint'},0,all[NC-1][n],mx(all[NC-1]),'·']);
+  rows.forEach(([L,th,T,M,num])=>{ const my=ly-4; const h=hotOf(L,M);
+    g.textBaseline='middle'; g.fillStyle=fg; g.beginPath(); g.arc(6,my,6,0,6.283); g.fill(); g.fillStyle=panelC; g.font='700 9px Arial'; g.textAlign='center'; g.fillText(num,6,my+0.5); g.textAlign='left';
+    g.fillStyle=fg; g.font='11.5px Arial'; g.fillText(L.name,17,my); g.fillStyle=muted; g.font='10.5px '+MONO; g.textAlign='right'; g.fillText(th?th.toFixed(th<2?1:th%1?1:0):'–',W-92,my);
+    g.fillStyle=h?acc:muted; g.font=(h?'700 ':'')+'11px '+MONO; g.fillText(`${Math.round(T)} · ${Math.round(M)}`,W,my); g.textAlign='left'; g.textBaseline='alphabetic';
+    g.strokeStyle=rule; g.beginPath(); g.moveTo(0,ly+Math.min(5,RH/2-3)); g.lineTo(W,ly+Math.min(5,RH/2-3)); g.stroke(); ly+=RH; });
+  g.fillStyle=muted; g.font='10px Arial'; g.fillText('At the outer face of each layer; typical thicknesses.',0,ly+8);
+}
+let REC={cls:0,visible:0,char:0,ign:0,qmax:0};
+function computeRecord(){ const s=probe.surf; let mark=0,broken=0,ch=0,ig=0,qm=0;
+  for(let i=0;i<s.count;i++){ const q=s.q[i]; qm=Math.max(qm,q); const T=look(q,tIdx,'s'), w=look(q,tIdx,'w'); if(T>=150) mark++; if(T>=600) broken++; if(w>=CHAR) ch++; if(w>=IGNITE) ig++; }
+  const N=s.count; REC={visible:broken/N*100,char:ch/N*100,ign:ig/N*100,cls:dinsClass(broken/N*100,mark>0),qmax:qm}; }
+function drawRecord(){
+  const [g,W,H]=fitCanvas($('#rec')); const fg=css('--fg'),muted=css('--muted'),acc=css('--accent'); g.clearRect(0,0,W,H);
+  const SX=Math.min(200,W*0.22), RX=W, SW=W-SX-Math.min(240,W*0.28), X=p=>SX+SW*p/100, rowA=30, rowB=88, bh=18;
+  g.fillStyle=muted; g.font='11px Arial'; g.fillText(`Wall: ${probe.surf.name} · record classes: CAL FIRE damage inspection (DINS)`,0,10);
+  g.fillStyle=fg; g.font='700 12px Arial'; g.fillText('Inspection record',0,rowA+8); g.fillStyle=muted; g.font='11px Arial'; g.fillText('what an inspector sees',0,rowA+23);
+  DINS.slice(1).forEach((d,j)=>{ const a=X(d.lo),b=X(d.hi),on=REC.cls===j+1; g.fillStyle=on?acc:`rgba(128,128,128,${0.12+j*0.08})`; g.fillRect(a,rowA,b-a-1,bh);
+    g.fillStyle=on?'#ffffff':fg; g.font=(on?'700 ':'')+'10.5px Arial'; g.textAlign='center'; g.fillText(b-a>70?`${d.name} ${d.lo}–${d.hi}%`:d.name,(a+b)/2,rowA+13); g.textAlign='left'; });
+  const va=REC.cls===0?SX:X(REC.cls===1?Math.min(REC.visible,9.5):REC.visible);
+  g.fillStyle=fg; g.beginPath(); g.moveTo(va,rowA-2); g.lineTo(va-5,rowA-9); g.lineTo(va+5,rowA-9); g.closePath(); g.fill();
+  g.textAlign='right'; g.fillStyle=REC.cls?acc:fg; g.font='700 13px Arial'; g.fillText(DINS[REC.cls].name,RX,rowA+8); g.fillStyle=muted; g.font='11px '+MONO; g.fillText(REC.cls?`stucco broken on ${Math.round(REC.visible)}% of wall`:'no visible marks',RX,rowA+23); g.textAlign='left';
+  g.fillStyle=fg; g.font='700 12px Arial'; g.fillText('Inside the wall',0,rowB+8); g.fillStyle=muted; g.font='11px Arial'; g.fillText('hidden behind the stucco',0,rowB+23);
+  g.fillStyle='rgba(128,128,128,0.12)'; g.fillRect(SX,rowB,SW,bh); g.fillStyle='rgb(70,48,36)'; g.fillRect(SX,rowB,SW*REC.char/100,bh);
+  if(REC.ign>0){ g.save(); g.beginPath(); g.rect(SX,rowB,SW*REC.ign/100,bh); g.clip(); g.strokeStyle=acc; g.lineWidth=3; g.beginPath(); for(let k=-bh;k<SW;k+=7){ g.moveTo(SX+k,rowB+bh); g.lineTo(SX+k+bh,rowB); } g.stroke(); g.restore(); }
+  [0,10,25,50,100].forEach(p=>{ g.fillStyle=muted; g.font='10px '+MONO; g.textAlign='center'; g.fillText(`${p}%`,X(p),rowB+bh+12); }); g.textAlign='left';
+  const vb=X(REC.char); g.fillStyle=fg; g.beginPath(); g.moveTo(vb,rowB-2); g.lineTo(vb-5,rowB-9); g.lineTo(vb+5,rowB-9); g.closePath(); g.fill();
+  g.textAlign='right'; g.fillStyle=REC.char>0?acc:fg; g.font='700 13px Arial'; g.fillText(REC.char>0?`wood charred: ${Math.round(REC.char)}%`:'wood intact',RX,rowB+8);
+  g.fillStyle=muted; g.font='11px '+MONO; g.fillText(REC.ign>0?`may ignite behind ${Math.round(REC.ign)}% (striped)`:'of this wall, above 300 °C',RX,rowB+23); g.textAlign='left';
+  if(REC.char-REC.visible>3){ const ya=rowA+bh+2, yb=rowB-11; g.save(); g.strokeStyle=acc; g.setLineDash([3,3]); g.beginPath(); g.moveTo(va,ya); g.lineTo(va,(ya+yb)/2); g.lineTo(vb,(ya+yb)/2); g.lineTo(vb,yb); g.stroke(); g.restore(); g.fillStyle=acc; g.font='700 11px Arial'; g.textAlign='center'; g.fillText('gap',(va+vb)/2,(ya+yb)/2-4); g.textAlign='left'; }
+  g.fillStyle=muted; g.font='10.5px Arial'; g.fillText('Sketch, not an assessment. DINS classes are an inspector’s visual estimate for a whole building; here they are applied to one wall, counting only crumbling stucco as damage.',0,H-4);
+}
+
+
+/* ================= after the fire: how long things last, and what a claim looks like =================
+   Durations come from published studies and California law (see notes below the page). They are not modeled. */
+let bandTab='rec';
+const DAY=[1,7,30,182,365,730,1095], DAYL=['1 day','1 wk','1 mo','6 mo','1 yr','2 yr','3 yr'];
+const LANES=[
+  {name:'Smoke gases (VOCs) in air', vis:'smelled', from:1, solid:35, dash:182, note:'elevated for weeks (measured); months in some homes'},
+  {name:'Lead & metal dust', vis:'invisible', from:1, solid:1095, arrow:true, note:'does not break down: stays until removed and tested clean'},
+  {name:'PAHs in indoor dust', vis:'invisible', from:1, solid:730, dash:1095, note:'stays in dust for years'},
+  {name:'Lead in blood, after exposure', vis:'blood test', from:1, half:30, note:'half-life ~1 month; bone stores it for decades'},
+  {name:'Insurance: living costs', vis:'', from:1, solid:730, dash:1095, ins:true, note:'paid 24 months, +12 if delays; smoke claims: until the home is cleared (from 2027)'}];
+function wrap(g,text,x,y,maxW,lh){ const words=text.split(' '); let line=''; for(const w of words){ const t=line?line+' '+w:w; if(g.measureText(t).width>maxW&&line){ g.fillText(line,x,y); y+=lh; line=w; } else line=t; } if(line) g.fillText(line,x,y); return y+lh; }
+function drawAfter(){
+  const [g,W,H]=fitCanvas($('#after')); const fg=css('--fg'),muted=css('--muted'),acc=css('--accent'),rule=css('--rule'); g.clearRect(0,0,W,H);
+  const LW=Math.max(250,Math.min(290,W*0.18)), X0=LW, X1=W-24, lx=v=>X0+(X1-X0)*Math.log(v)/Math.log(1095), top=12, rh=22;
+  // axis
+  g.font='10px '+MONO; g.fillStyle=muted; g.textAlign='center';
+  DAY.forEach((d,i)=>{ const x=lx(d); g.strokeStyle=rule; g.beginPath(); g.moveTo(x,top); g.lineTo(x,top+LANES.length*rh); g.stroke(); g.textAlign=i===DAY.length-1?'right':i===0?'left':'center'; g.fillText(DAYL[i],x,top+LANES.length*rh+12); });
+  g.textAlign='left';
+  LANES.forEach((L,i)=>{ const y=top+i*rh, cy=y+rh/2;
+    g.fillStyle=fg; g.font=(L.ins?'700 ':'')+'11.5px Arial'; g.fillText(L.name,0,cy+6);
+    if(L.vis){ g.fillStyle=L.vis==='invisible'?acc:muted; g.font='9.5px '+MONO; g.textAlign='right'; g.fillText(L.vis,X0-8,cy+6); g.textAlign='left'; }
+    const col=L.ins?fg:acc, bh=7, by=cy+1;
+    if(L.half){ const gr=g.createLinearGradient(lx(1),0,lx(365),0); gr.addColorStop(0,acc); gr.addColorStop(Math.log(L.half*3)/Math.log(365),'rgba(209,10,10,0.08)'); gr.addColorStop(1,'rgba(209,10,10,0.02)'); g.fillStyle=gr; g.fillRect(lx(1),by,lx(365)-lx(1),bh);
+      g.strokeStyle=acc; g.beginPath(); g.moveTo(lx(L.half),by-3); g.lineTo(lx(L.half),by+bh+3); g.stroke(); }
+    else { g.fillStyle=col; g.fillRect(lx(L.from),by,lx(L.solid)-lx(L.from),bh);
+      if(L.dash){ g.save(); g.strokeStyle=col; g.lineWidth=1.5; g.setLineDash([4,3]); g.strokeRect(lx(L.solid),by+0.75,lx(L.dash)-lx(L.solid),bh-1.5); g.restore(); }
+      if(L.arrow){ const x=lx(L.solid); g.fillStyle=col; g.beginPath(); g.moveTo(x,by-3); g.lineTo(x+8,by+bh/2); g.lineTo(x,by+bh+3); g.closePath(); g.fill(); } }
+    g.font='9.5px Arial'; g.save(); g.lineWidth=3; g.strokeStyle=css('--panel')||'#000'; g.strokeText(L.note,lx(1)+4,by-3); g.restore(); g.fillStyle=muted; g.fillText(L.note,lx(1)+4,by-3);
+  });
+}
+$('#cats').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; b.setAttribute('aria-pressed',b.getAttribute('aria-pressed')==='true'?'false':'true');
+  const on=new Set([...$('#cats').querySelectorAll('button[aria-pressed="true"]')].map(x=>x.dataset.c)); document.querySelectorAll('.ev').forEach(ev=>ev.hidden=!on.has(ev.dataset.c)); });
+$('#bandTab').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; bandTab=b.dataset.b; $('#bandTab').querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b));
+  $('#rec').hidden=bandTab!=='rec'; $('#after').hidden=bandTab==='rec';
+  $('#bandTitle').textContent=bandTab==='rec'?'What the record would say vs what is inside this wall':'After the fire: how long contaminants stay, and how long insurance pays (from studies and law, not modeled)'; update(); });
+
+/* ================= key, readout, controls ================= */
+function key(){ if(mode==='xray'){ $('#key').innerHTML=`<span>wood sheathing behind the stucco, hottest so far</span><div class="bar" style="background:linear-gradient(90deg,rgb(205,172,120) 0 50%,rgb(96,64,42) 50% 75%,rgb(42,26,18) 75%)"></div><div class="lab"><span>&lt;300 °C</span><span>chars 300</span><span>320+</span></div><span>studs at 406 mm, top and bottom plates</span>`; return; } if(mode==='flux'){ const st=FLUX.map(([q,c])=>`rgb(${c}) ${q/80*100}%`).join(','); $('#key').innerHTML=`<span>peak heat flux on surfaces (kW/m²)</span><div class="bar" style="background:linear-gradient(90deg,${st})"></div><div class="lab"><span>0</span><span>12 · white line: wood can ignite</span><span>80</span></div>`; }
+  else { const st=STOPS.map(([t,c])=>`rgb(${c}) ${(t-20)/1080*100}%`).join(','); $('#key').innerHTML=`<span>stucco color at its hottest moment</span><div class="bar" style="background:linear-gradient(90deg,${st})"></div><div class="lab"><span>20</span><span>300</span><span>600</span><span>1100 °C</span></div><span>north wall: layers peeled, depth ×4</span>`; } }
+function update(){
+  const m=tIdx*DT; $('#timeOut').textContent=`${fmt(m)} min`;
+  paint(); computeRecord(); drawCore(); if(bandTab==='rec') drawRecord(); else drawAfter(); annotate();
+  const S=SOURCES[srcK], np=nearestOnHouse(fire.x,fire.z), T=look(probe.q,tIdx,'s'), Wm=Math.max(...probe.run.wood.slice(0,tIdx+1));
+  const ignAt=Array.from(probe.run.wood).findIndex(v=>v>=IGNITE), ign=ignAt>=0&&tIdx>=ignAt;
+  const rows=[`<span><b>${S.name}, ${np.d.toFixed(1)} m from the house, minute ${fmt(m)}.</b> Flames assumed ${S.w} × ${S.h} m at ~${S.T} °C, emitting up to <span class="num">${Math.round(E0())}</span> kW/m².</span>`,
+    `<span><b>Marked point (${probe.surf.name.toLowerCase()}):</b> receives up to <span class="num">${probe.q.toFixed(1)}</span> kW/m². Surface hottest <span class="num">${Math.round(T)}</span> °C (${STAGE(T)}); wood behind hottest <span class="num">${Math.round(Wm)}</span> °C.</span>`,
+    REC.cls===0?`<span><b>Record vs inside:</b> no visible marks on this wall.</span>`:`<span><b>Record vs inside:</b> an inspector would likely record <b>${DINS[REC.cls].name}</b>, while the wood behind ${Math.round(REC.char)}% of this wall has passed 300 °C.</span>`];
+  if(ign) rows.push(`<span class="warn">Wood behind the marked point reached ~320 °C at minute ${fmt(ignAt*DT)} and could ignite, though the stucco itself does not burn.</span>`);
+  $('#read').innerHTML=rows.join('');
+  refreshCards();
+  $('#coreSub').textContent=`${probe.surf.name} · ${probe.q.toFixed(1)} kW/m² at peak`;
+}
+function setProbe(s,pt){ probe.surf=s; probe.p.copy(pt); probe.n.copy(s.n); const E=E0(); probe.q=E*viewFactor(probe.p,probe.n); probe.run=runWall(probe.q,true); buildCore(); if(exploded){ buildSlabs(); slabs.forEach(sl=>{ sl.m.position.copy(sl.to); sl.e.position.copy(sl.to); }); } }
+/* marker at the clicked point (on the north wall it sits on the exposed layer) */
+const coreG=new THREE.Group(); scene.add(coreG); let coreGroups=[];
+const HW=1.7, HHt=2.0, EXD=3;
+function basis(){ const n=probe.n.clone(); const t=new THREE.Vector3(0,1,0).cross(n).normalize(); return {n,t,u:V(0,1,0)}; }
+function buildCore(){ while(coreG.children.length) coreG.remove(coreG.children[0]);
+  const p=probe.p.clone(); if(probe.surf===NW){ const b=bandAt(p.x); if(b) p.z=b.zf; }
+  const m=new THREE.MeshBasicMaterial({color:0xff4a3d,side:THREE.DoubleSide,depthTest:false,transparent:true});
+  const r=new THREE.Mesh(new THREE.RingGeometry(0.13,0.17,40),m); r.renderOrder=5; r.position.copy(p).addScaledVector(probe.n,0.02); r.lookAt(p.clone().addScaledVector(probe.n,1)); coreG.add(r);
+  const dot=new THREE.Mesh(new THREE.CircleGeometry(0.035,20),m); dot.renderOrder=5; dot.position.copy(r.position); dot.quaternion.copy(r.quaternion); coreG.add(dot); }
+function paintCore(){}
+
+/* ================= double-click: the wall's layers slide out and are explained ================= */
+const INFO={
+  finish:'Thin top coat of cement plaster that gives the wall its color and texture. It shows heat first: paint yellows, then the plaster turns pink from about 300 °C.',
+  brown:'The levelling coat. Same cement plaster: pink from about 300 °C, grey and crumbly above about 600 °C, when it loses most of its strength.',
+  scratch:'The first coat, scored so the next coat grips. It holds the wire lath that anchors the stucco to the wall. Heat makes the lath expand and can break that bond.',
+  wrb:'Asphalt-saturated paper that keeps rain out of the wall. It can char and lose its water protection; no reliable temperature threshold was found.',
+  sheath:'Structural wood panel nailed to the studs. Wood chars at about 300 °C and can ignite at about 320 °C with a flame or spark nearby.',
+  cavityIns:'Glass-fibre insulation between the studs. The fibre does not burn, but heat passes slowly through it, so heat builds up in the layers outside it.',
+  cavityStud:'A 2×4 wood stud that carries the roof. Charring reduces its section and its strength.',
+  gyp:'The interior wall. Gypsum starts losing its chemically bound water at about 125 °C. From inside the room it can look unchanged.'};
+function statusOf(L,M){ switch(L.mat){
+  case 'stucco': return M<150?'unchanged':M<300?'paint and surface yellowing':M<600?'pink to red: heated past 300 °C':M<900?'grey, crumbly: strength lost':'buff: most severe';
+  case 'paper': return M<CHAR?'intact':'likely charred';
+  case 'wood': return M<200?'intact':M<CHAR?'drying, starting to darken':M<IGNITE?'charring':'past ignition temperature';
+  case 'ins': return M<250?'intact':'binder may have burned off';
+  case 'gyp': return M<GYP?'intact':'losing bound water'; default: return ''; } }
+const pinned={};
+const expG=new THREE.Group(); scene.add(expG); let slabs=[], exploded=false, expT0=0, expDir=0;
+function buildSlabs(){ while(expG.children.length) expG.remove(expG.children[0]); slabs=[];
+  const {n,t}=basis(); const c=probe.p.clone(), groups=LAYERS.filter(L=>L.n), N=groups.length; let depth=0;
+  groups.forEach((L,i)=>{ const th=Math.max(L.th*EXD,0.012), mid=depth+th/2;
+    const m=new THREE.Mesh(new THREE.BoxGeometry(HW*0.86,HHt*0.86,th),new THREE.MeshBasicMaterial({color:0xffffff}));
+    const e=new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry),new THREE.LineBasicMaterial({color:0x0e0e0e}));
+    const from=c.clone().addScaledVector(n,-mid), to=c.clone().addScaledVector(n,0.45+(N-1-i)*0.42);
+    m.lookAt(n.clone()); e.quaternion.copy(m.quaternion); m.quaternion.setFromUnitVectors(V(0,0,1),n); e.quaternion.copy(m.quaternion);
+    expG.add(m); expG.add(e); slabs.push({L,m,e,from,to,top:c.clone().addScaledVector(t,-HW*0.43).add(V(0,HHt*0.43,0))}); depth+=L.th*EXD; });
+  paintSlabs(); }
+function paintSlabs(){ const all=probe.run.all, n=tIdx, mx=a=>{ let m=-1e9; for(let k=0;k<=n;k++) m=Math.max(m,a[k]); return m; };
+  slabs.forEach(sl=>{ const T=mx(all[FIRST[sl.L.k]]), col=cellColor(sl.L,T); sl.m.material.color.setRGB(col[0]/255,col[1]/255,col[2]/255); }); }
+function cardsHTML(){ const all=probe.run.all, n=tIdx, mx=a=>{ let m=-1e9; for(let k=0;k<=n;k++) m=Math.max(m,a[k]); return m; };
+  const groups=LAYERS.filter(L=>L.n);
+  return `<div class="hd"><span>WALL BUILD-UP · ${probe.surf.name.toUpperCase()}</span><button id="closeLayers" type="button">Close ✕</button></div>`+
+    groups.map((L,i)=>{ const M=mx(all[FIRST[L.k]]), T=all[FIRST[L.k]][n], hot=hotOf(L,M); const info=L.k==='cavity'?(path==='stud'?INFO.cavityStud:INFO.cavityIns):INFO[L.k];
+      return `<div class="card${hot?' hot':''}${pinned[i]?' pin':''}" data-i="${i}" style="transition-delay:${i*60}ms"><div class="t"><span>${i+1} · ${L.name}</span><span>${(L.th*1000).toFixed(L.th<0.002?1:(L.th*1000)%1?1:0)} mm</span></div>
+        <div class="p">k ${L.kc} W/m·K · ρ ${L.rho} kg/m³ · c ${L.c} J/kg·K</div><div class="d">${info}</div>
+        <div class="s">hottest ${Math.round(M)} °C · now ${Math.round(T)} °C · ${statusOf(L,M)}</div></div>`; }).join(''); }
+function wireCards(){ const box=$('#layers'); const cl=$('#closeLayers'); if(cl) cl.onclick=closeLayers;
+  box.querySelectorAll('.card').forEach(c=>{ const i=+c.dataset.i; c.onmouseenter=()=>{ slabs.forEach((s,j)=>s.e.material.color.set(j===i?0xff4a3d:0x0e0e0e)); c.classList.add('on'); annotate(); };
+    c.onmouseleave=()=>{ slabs.forEach(s=>s.e.material.color.set(0x0e0e0e)); c.classList.remove('on'); annotate(); };
+    c.onclick=()=>{ c.classList.toggle('pin'); pinned[i]=c.classList.contains('pin'); annotate(); }; }); }
+function refreshCards(){ if(!exploded) return; const box=$('#layers'); const sc=box.scrollTop; box.innerHTML=cardsHTML(); box.scrollTop=sc; wireCards(); paintSlabs(); }
+function openLayers(){ buildSlabs(); exploded=true; expDir=1; expT0=performance.now(); coreG.visible=false;
+  const box=$('#layers'); box.hidden=false; box.classList.remove('open'); $('#key').hidden=true; box.innerHTML=cardsHTML(); wireCards(); requestAnimationFrame(()=>box.classList.add('open'));
+  // move the camera to an oblique view so the layers read side by side
+  const n=probe.n, t=new THREE.Vector3(0,1,0).cross(n).normalize(); fly={t0:performance.now(),from:camera.position.clone(),fromT:controls.target.clone(),
+    toT:probe.p.clone().addScaledVector(n,1.6), to:probe.p.clone().addScaledVector(n,4.6).addScaledVector(t,-4.2).add(V(0,1.4,0))}; hideHints(); }
+function closeLayers(){ expDir=-1; expT0=performance.now(); $('#layers').classList.remove('open'); setTimeout(()=>{ if(expDir<0){ $('#layers').hidden=true; exploded=false; coreG.visible=true; $('#key').hidden=false; annotate(); } },700); }
+function stepExplode(now){ if(!slabs.length||expDir===0) return; const u=Math.min(1,(now-expT0)/(reduce?1:900)), e=u*u*(3-2*u), k=expDir>0?e:1-e;
+  slabs.forEach(sl=>{ sl.m.position.lerpVectors(sl.from,sl.to,k); sl.e.position.copy(sl.m.position); }); expG.visible=k>0.001; if(exploded) annotate(); }
+const ray=new THREE.Raycaster(), mouse=new THREE.Vector2(), gp=new THREE.Plane(V(0,1,0),0);
+let dragging=false, down=null, hintsOn=true;
+function setMouse(e){ const r=renderer.domElement.getBoundingClientRect(); mouse.set(((e.clientX-r.left)/r.width)*2-1,-((e.clientY-r.top)/r.height)*2+1); ray.setFromCamera(mouse,camera); }
+const wallMeshes=()=>SURFS.filter(s=>s.kind==='wall').map(s=>s.mesh);
+renderer.domElement.addEventListener('pointerdown',e=>{ setMouse(e); down={x:e.clientX,y:e.clientY}; if(ray.intersectObject(hitBox).length){ dragging=true; controls.enabled=false; renderer.domElement.setPointerCapture(e.pointerId); renderer.domElement.style.cursor='grabbing'; } });
+let pend=false;
+renderer.domElement.addEventListener('pointermove',e=>{ setMouse(e);
+  if(dragging){ const p=new THREE.Vector3(); if(ray.ray.intersectPlane(gp,p)){ const x=Math.max(-26,Math.min(26,p.x)), z=Math.max(-26,Math.min(26,p.z)); if(insideHouse(x,z,1+SOURCES[srcK].w*0.05)) return; fire.x=x; fire.z=z; placeFire();
+      if(!pend){ pend=true; requestAnimationFrame(()=>{ pend=false; computeFlux(); update(); }); } } return; }
+  const wh=ray.intersectObjects(wallMeshes())[0]; renderer.domElement.style.cursor=ray.intersectObject(hitBox).length?'grab':wh?'crosshair':'default';
+  const hb=wh&&wh.object===NW.mesh?(bandAt(wh.point.x)||{}).i:null; if(hb!==hoverBand){ hoverBand=hb==null?null:hb; annotate(); } });
+renderer.domElement.addEventListener('dblclick',e=>{ setMouse(e); const hit=ray.intersectObjects(wallMeshes())[0]; if(!hit) return; if(!exploded||hit.object.userData.surf!==probe.surf||hit.point.distanceTo(probe.p)>0.3){ setProbe(hit.object.userData.surf,hit.point); update(); } openLayers(); });
+window.addEventListener('keydown',e=>{ if(e.key==='Escape'&&exploded) closeLayers(); });
+renderer.domElement.addEventListener('pointerup',e=>{ setMouse(e);
+  if(dragging){ dragging=false; controls.enabled=true; renderer.domElement.style.cursor='grab'; hideHints(); return; }
+  if(down&&Math.hypot(e.clientX-down.x,e.clientY-down.y)<5){ const hit=ray.intersectObjects(wallMeshes())[0]; if(hit){ setProbe(hit.object.userData.surf,hit.point); update(); hideHints(); } } down=null; });
+function hideHints(){ if(!hintsOn) return; hintsOn=false; setTimeout(()=>{ $('#hints').hidden=true; },2500); }
+controls.addEventListener('change',()=>annotate());
+$('#src').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; srcK=+b.dataset.k; $('#src').querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b)); buildPanel(); placeFire(); computeFlux(); update(); });
+// fly the camera to face the cutaway, a few meters out from the wall
+let fly=null;
+$('#focus').addEventListener('click',()=>{ fly={t0:performance.now(),from:camera.position.clone(),fromT:controls.target.clone(),to:V(-7.5,4.6,-12.5),toT:V(1.5,1.2,-4)}; });
+$('#path').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; path=b.dataset.p; $('#path').querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b)); buildModel(); buildSection(); computeFlux(); buildCore(); update(); });
+$('#mode').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; mode=b.dataset.m; $('#mode').querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b)); key(); update(); });
+let playing=false,last=0,tf=0; const SPEED=1/1000; // 1 minute of fire per second
+function label(){ $('#play').textContent=playing?'❚❚ Pause':(tIdx>=NT-1?'▶ Replay':tIdx>0?'▶ Resume':'▶ Play'); }
+function stop(){ playing=false; label(); }
+$('#play').addEventListener('click',()=>{ if(playing){ stop(); return; } if(tIdx>=NT-1){ tf=0; tIdx=0; } if(reduce){ tf=TMAX; tIdx=NT-1; $('#time').value=TMAX; update(); label(); return; } playing=true; last=performance.now(); label(); hideHints(); });
+$('#reset').addEventListener('click',()=>{ stop(); tf=0; tIdx=0; $('#time').value=0; update(); label(); });
+$('#time').addEventListener('input',e=>{ stop(); tf=+e.target.value; tIdx=Math.round(tf/DT); update(); label(); });
+function resize(){ const r=host.getBoundingClientRect(); renderer.setSize(r.width,r.height,false); camera.aspect=r.width/Math.max(1,r.height); camera.updateProjectionMatrix(); svg.setAttribute('viewBox',`0 0 ${r.width} ${r.height}`); }
+new ResizeObserver(()=>{ resize(); update(); }).observe(host);
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change',update);
+new MutationObserver(update).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+function loop(now){
+  if(playing){ tf=Math.min(TMAX,tf+(now-last)*SPEED); last=now; const ni=Math.round(tf/DT); if(ni!==tIdx){ tIdx=ni; $('#time').value=tIdx*DT; update(); } if(tf>=TMAX) stop(); }
+  if(hintsOn&&!reduce){ const u=(now/1000%1.4)/1.4; ring.material.opacity=0.8*(1-u); ring.scale.setScalar(1+u*0.8); } else { ring.material.opacity=0.5; ring.scale.setScalar(1); }
+  stepExplode(now);
+  if(fly){ const u=Math.min(1,(now-fly.t0)/(reduce?1:900)), e=u*u*(3-2*u); camera.position.lerpVectors(fly.from,fly.to,e); controls.target.lerpVectors(fly.fromT,fly.toT,e); controls.update(); annotate(); if(u>=1) fly=null; }
+  renderer.render(scene,camera); requestAnimationFrame(loop); }
+buildPanel(); placeFire(); probe.surf=SURFS[0]; computeFlux(); buildCore(); key(); resize(); update(); label(); requestAnimationFrame(loop);
+})();
+</script>
+</body></html>
