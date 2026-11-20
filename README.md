@@ -10,6 +10,8 @@ Open `index.html` in a browser. It is one self-contained file; it needs an inter
 
 ## What is in the page
 
+- **Guided start**: scrolling walks through 7 steps, from an aerial view of a 1.2 km square of Altadena (real OpenStreetMap footprints, burned vs standing) down to one model house, then fire, heat marks, the wall layers, one point through the wall, and the inspection record. The full tool opens on the last step; "skip to the tool" jumps there. On narrow screens the tool opens directly.
+
 - **3D house**: drag the fire, click a wall to see the temperature through it, double-click to open the wall layers. The north wall is drawn as a section with its layers peeled back (depth ×4).
 - **Right panel**: temperature through the wall at the marked point, layer by layer.
 - **Bottom panel**: what an inspector would likely record vs what is inside the wall; second tab shows how long contaminants stay and how long insurance pays for living elsewhere.
@@ -22,5 +24,7 @@ Open `index.html` in a browser. It is one self-contained file; it needs an inter
 - Flame size, flame temperature, the fire curve and the wall build-up are **assumed typical values**, not measurements of a real house.
 - Stucco color stages (pink, grey, buff) and wood char/ignition thresholds come from engineering literature.
 - Durations of contaminants and insurance rules come from published studies and California law, not from the model.
+
+The model house is placed in an open spot at the edge of the burned area; it is not a real address. Building footprints © OpenStreetMap contributors (ODbL).
 
 This is a design concept, not a damage assessment. Sources are listed at the bottom of the page.
